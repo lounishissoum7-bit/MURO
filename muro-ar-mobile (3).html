@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>MURO AR</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0E0C0A;font-family:Georgia,serif;color:#F0ECE4;overflow:hidden;height:100vh;width:100vw}
+#app{display:flex;flex-direction:column;height:100vh}
+#header{background:#141210;border-bottom:1px solid #2A2520;padding:8px 14px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;height:50px}
+.brand{color:#C9A96E;font-size:17px;letter-spacing:4px;font-weight:bold}
+#content{flex:1;display:flex;overflow:hidden;position:relative}
+#cam-wrap{position:absolute;inset:0;background:#000;display:flex;align-items:center;justify-content:center;display:none}
+video{width:100%;height:100%;object-fit:cover;display:block}
+canvas{position:absolute;inset:0;width:100%;height:100%;touch-action:none}
+#panel{position:absolute;bottom:0;left:0;right:0;background:rgba(14,12,10,0.95);border-top:1px solid #2A2520;backdrop-filter:blur(16px);max-height:52vh;display:flex;flex-direction:column;z-index:10}
+#panel-handle{width:36px;height:4px;background:#2A2520;border-radius:2px;margin:7px auto}
+#panel-tabs{display:flex;border-bottom:1px solid #1E1C18;flex-shrink:0}
+.tab{flex:1;padding:8px 4px;background:transparent;color:#555;border:none;border-bottom:2px solid transparent;cursor:pointer;font-family:inherit;font-size:9px;letter-spacing:1px;transition:all 0.2s;text-align:center}
+.tab.active{color:#C9A96E;border-bottom-color:#C9A96E;background:rgba(201,169,110,0.05)}
+#panel-content{flex:1;overflow-y:auto;padding:10px 12px}
+#fab-area{position:absolute;top:10px;right:10px;display:flex;flex-direction:column;gap:8px;z-index:10;display:none}
+.fab{width:44px;height:44px;border-radius:50%;border:1px solid #2A2520;background:rgba(14,12,10,0.9);color:#C9A96E;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+#measure-hud{position:absolute;top:10px;left:10px;background:rgba(14,12,10,0.9);border:1px solid #2A2520;border-radius:8px;padding:8px 12px;font-size:9px;z-index:10;display:none}
+#step-hint{position:absolute;bottom:calc(52vh + 10px);left:50%;transform:translateX(-50%);background:rgba(14,12,10,0.95);border:1px solid #C9A96E;border-radius:20px;padding:8px 16px;font-size:11px;color:#C9A96E;white-space:nowrap;z-index:11;display:none}
+#welcome{position:absolute;inset:0;background:#0E0C0A;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;text-align:center;z-index:20;overflow-y:auto}
+#welcome h2{font-size:20px;font-weight:normal;margin-bottom:8px}
+#welcome em{color:#C9A96E}
+#welcome p{color:#6A5E54;font-size:11px;line-height:1.7;margin-bottom:20px;max-width:300px}
+.btn-main{background:#C9A96E;color:#0E0C0A;border:none;padding:13px 28px;border-radius:8px;cursor:pointer;font-family:inherit;font-weight:bold;font-size:12px;letter-spacing:2px;width:100%;max-width:260px}
+#err-box{border-radius:8px;padding:12px 14px;font-size:11px;line-height:1.8;margin-top:12px;text-align:left;display:none;max-width:320px;width:100%}
+#loading{display:none;flex-direction:column;align-items:center;gap:8px;margin-top:12px}
+.spinner{width:26px;height:26px;border:2px solid #2A2520;border-top-color:#C9A96E;border-radius:50%;animation:spin 0.8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.prod-card{background:#141210;border:1px solid #1E1C18;border-radius:8px;padding:9px;margin-bottom:7px;display:flex;gap:8px;align-items:center}
+.prod-info{flex:1}
+.prod-name{font-size:11px;color:#F0ECE4;margin-bottom:1px}
+.prod-price{font-size:10px;color:#C9A96E}
+.prod-dims{font-size:8px;color:#6A5E54}
+.btn-place{background:rgba(201,169,110,0.1);color:#C9A96E;border:1px solid #C9A96E;padding:7px 10px;border-radius:6px;cursor:pointer;font-family:inherit;font-size:10px;flex-shrink:0}
+.inp{background:#0E0C0A;border:1px solid #2A2520;color:#F0ECE4;padding:8px 12px;border-radius:6px;font-family:inherit;font-size:13px;width:100%;outline:none;margin-bottom:8px}
+.btn-meas{background:rgba(201,169,110,0.1);color:#C9A96E;border:1px solid #C9A96E;padding:10px;border-radius:6px;cursor:pointer;font-family:inherit;font-size:10px;width:100%;letter-spacing:1px;margin-bottom:8px}
+#summary{position:absolute;bottom:52vh;left:0;right:0;background:rgba(14,12,10,0.9);padding:7px 16px;display:none;justify-content:space-between;align-items:center;z-index:9}
+::-webkit-scrollbar{width:3px}::-webkit-scrollbar-thumb{background:#C9A96E;border-radius:2px}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="header">
+    <div><div class="brand">MURO</div><div style="color:#3a3530;font-size:7px;letter-spacing:4px">SIMULATEUR AR</div></div>
+    <div id="hstatus" style="font-size:9px;color:#554840;letter-spacing:2px">PRÊT</div>
+  </div>
+  <div id="content">
+    <div id="cam-wrap">
+      <video id="video" playsinline webkit-playsinline muted autoplay></video>
+      <canvas id="canvas"></canvas>
+    </div>
+    <div id="fab-area">
+      <button class="fab" onclick="stopCamera()">✕</button>
+      <button class="fab" onclick="saveSnap()">📸</button>
+      <button class="fab" id="btn-del" onclick="deleteSelected()" style="display:none;border-color:#E05A5A;color:#E05A5A">🗑</button>
+    </div>
+    <div id="measure-hud">
+      <div style="color:#C9A96E;font-weight:bold;font-size:9px;letter-spacing:2px">◉ CAMÉRA ACTIVE</div>
+      <div id="hud2" style="color:#666;margin-top:2px">Onglet Mesure →</div>
+    </div>
+    <div id="step-hint"></div>
+    <div id="summary">
+      <span id="sum-txt" style="font-size:11px;color:#C9A96E"></span>
+      <button onclick="clearAll()" style="background:transparent;border:1px solid #2A2520;color:#666;padding:4px 10px;border-radius:4px;cursor:pointer;font-family:inherit;font-size:9px">Effacer</button>
+    </div>
+    <div id="welcome">
+      <div style="width:66px;height:66px;border-radius:50%;background:rgba(201,169,110,0.1);border:1px solid #C9A96E;display:flex;align-items:center;justify-content:center;font-size:26px;margin-bottom:16px">◉</div>
+      <h2>Simulateur <em>AR</em></h2>
+      <p>Pointez vers votre mur, mesurez-le, placez les produits en temps réel.</p>
+      <button class="btn-main" id="btn-start" onclick="startCamera()">◉ ACTIVER LA CAMÉRA</button>
+      <div id="loading"><div class="spinner"></div><div style="font-size:10px;color:#666">Connexion caméra...</div></div>
+      <div id="err-box"></div>
+    </div>
+    <div id="panel">
+      <div id="panel-handle"></div>
+      <div id="panel-tabs">
+        <button class="tab active" onclick="switchTab('products')">🛋️ Produits</button>
+        <button class="tab" onclick="switchTab('measure')">📐 Mesure</button>
+        <button class="tab" onclick="switchTab('ambiances')">🎨 Ambiances</button>
+      </div>
+      <div id="panel-content"></div>
+    </div>
+  </div>
+</div>
+<script>
+const PRODUCTS=[
+  {id:0,emoji:"🛋️",name:"Console Loft Industriel",price:649,w:180,h:55,color:"#c8a97e"},
+  {id:1,emoji:"🪵",name:"Meuble Scandinave",price:489,w:160,h:40,color:"#d4b896"},
+  {id:2,emoji:"📚",name:"Bibliothèque Modulable",price:1190,w:280,h:200,color:"#3a3a3a"},
+  {id:3,emoji:"🔷",name:"Panneaux 3D Chevrons",price:89,w:60,h:30,color:"#f5f2ec"},
+  {id:4,emoji:"🪵",name:"Lames Murales Chêne",price:45,w:200,h:18,color:"#c8a070"},
+  {id:5,emoji:"🔆",name:"Miroir Soleil Rotin",price:229,w:90,h:90,color:"#c8a060"},
+  {id:6,emoji:"💡",name:"Ruban LED RGB",price:59,w:160,h:10,color:"#ffcc66"},
+  {id:7,emoji:"🔦",name:"Applique Laiton",price:119,w:20,h:35,color:"#c8a040"},
+];
+const AMBIANCES=[
+  {id:"scan",label:"Scandinave 🪵",products:[1,4,6]},
+  {id:"ind",label:"Industriel ⚙️",products:[0,4,7]},
+  {id:"boh",label:"Bohème 🌿",products:[1,5,6]},
+  {id:"lux",label:"Luxe Moderne 💎",products:[2,3,7]},
+];
+
+let mediaStream=null,cameraOn=false,animId=null,activeTab="products";
+let measureStep=0,measurePts=[],ppc=2,wallW=0,wallH=0,wallMeasured=false;
+let placed=[],selIdx=null,dragging=null,dragOffX=0,dragOffY=0,touchMoved=false;
+const video=document.getElementById("video");
+const canvas=document.getElementById("canvas");
+const ctx=canvas.getContext("2d");
+
+// ── CAMERA ─────────────────────────────────────────────────────────────────
+async function startCamera(){
+  const btnStart=document.getElementById("btn-start");
+  const loading=document.getElementById("loading");
+  btnStart.style.display="none";
+  loading.style.display="flex";
+  setErr("","");
+
+  // Detect file:// — camera blocked by Android
+  if(location.protocol==="file:"){
+    setErr(
+      "⚠️ <strong>Pourquoi la caméra ne s'ouvre pas :</strong><br><br>"+
+      "Android bloque automatiquement la caméra sur les fichiers locaux, même avec la permission accordée. C'est une restriction du système, pas un bug.<br><br>"+
+      "✅ <strong>Solution simple (2 min) :</strong><br>"+
+      "1. Sur votre PC allez sur <strong>tiiny.host</strong><br>"+
+      "2. Glissez ce fichier HTML dans la page<br>"+
+      "3. Copiez le lien <strong>https://...</strong><br>"+
+      "4. Ouvrez ce lien dans Firefox sur votre téléphone<br>"+
+      "→ La caméra s'activera automatiquement ✓",
+      "warn"
+    );
+    btnStart.style.display="block";
+    loading.style.display="none";
+    return;
+  }
+
+  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){
+    setErr("❌ Navigateur incompatible. Utilisez Firefox ou Chrome à jour.","err");
+    btnStart.style.display="block"; loading.style.display="none"; return;
+  }
+
+  // 4 fallback attempts
+  const tries=[
+    {video:{facingMode:{ideal:"environment"},width:{ideal:1280},height:{ideal:720}},audio:false},
+    {video:{facingMode:"environment"},audio:false},
+    {video:{facingMode:"user"},audio:false},
+    {video:true,audio:false},
+  ];
+  for(let i=0;i<tries.length;i++){
+    try{
+      mediaStream=await navigator.mediaDevices.getUserMedia(tries[i]);
+      video.srcObject=mediaStream;
+      video.setAttribute("playsinline","");
+      video.setAttribute("webkit-playsinline","");
+      video.muted=true;
+      await new Promise(res=>{video.onloadedmetadata=res;setTimeout(res,3000);});
+      await video.play().catch(()=>{});
+      onReady(); return;
+    }catch(e){
+      if(i===tries.length-1){ onError(e); btnStart.style.display="block"; loading.style.display="none"; }
+    }
+  }
+}
+
+function onReady(){
+  cameraOn=true;
+  document.getElementById("welcome").style.display="none";
+  document.getElementById("cam-wrap").style.display="flex";
+  document.getElementById("fab-area").style.display="flex";
+  document.getElementById("measure-hud").style.display="block";
+  document.getElementById("hstatus").textContent="◉ LIVE";
+  document.getElementById("hstatus").style.color="#4CAF8A";
+  startLoop(); renderTab();
+}
+
+function stopCamera(){
+  if(mediaStream)mediaStream.getTracks().forEach(t=>t.stop());
+  mediaStream=null; cameraOn=false; cancelAnimationFrame(animId);
+  document.getElementById("welcome").style.display="flex";
+  document.getElementById("cam-wrap").style.display="none";
+  document.getElementById("fab-area").style.display="none";
+  document.getElementById("measure-hud").style.display="none";
+  document.getElementById("summary").style.display="none";
+  document.getElementById("step-hint").style.display="none";
+  document.getElementById("hstatus").textContent="PRÊT";
+  document.getElementById("hstatus").style.color="#554840";
+  document.getElementById("btn-start").style.display="block";
+  document.getElementById("loading").style.display="none";
+  resetMeasure(); placed=[]; selIdx=null;
+}
+
+function onError(e){
+  const n=(e&&e.name)||"";
+  let msg="",type="err";
+  if(n==="NotAllowedError"||n==="PermissionDeniedError"){
+    msg="🔒 <strong>Permission caméra refusée</strong><br><br>"+
+        "Dans Firefox :<br>"+
+        "1. Appuyez sur le 🔒 cadenas dans la barre d'adresse<br>"+
+        "2. Autorisations du site → Caméra → <strong>Autoriser</strong><br>"+
+        "3. Rechargez la page et réessayez<br><br>"+
+        "Dans Paramètres Android :<br>"+
+        "Applications → Firefox → Autorisations → Caméra → Autoriser";
+  }else if(n==="NotReadableError"||n==="AbortError"){
+    msg="⚠️ <strong>Caméra utilisée par une autre app</strong><br><br>Fermez WhatsApp, TikTok, Instagram, puis réessayez."; type="warn";
+  }else if(n==="NotFoundError"){
+    msg="📷 Aucune caméra détectée sur cet appareil.";
+  }else{
+    msg="❌ Erreur: <strong>"+(n||"inconnue")+"</strong><br>"+(e?e.message:"")+"<br><br>Vérifiez les autorisations dans les paramètres Android.";
+  }
+  setErr(msg,type);
+}
+
+function setErr(msg,type){
+  const b=document.getElementById("err-box");
+  b.innerHTML=msg; b.style.display=msg?"block":"none";
+  b.style.background=type==="warn"?"rgba(201,169,110,0.08)":"rgba(224,90,90,0.08)";
+  b.style.border="1px solid "+(type==="warn"?"#C9A96E":"#E05A5A");
+  b.style.color=type==="warn"?"#C9A96E":"#E05A5A";
+}
+
+// ── DRAW LOOP ──────────────────────────────────────────────────────────────
+function startLoop(){
+  const draw=()=>{
+    if(!cameraOn)return;
+    if(video.readyState>=2){
+      canvas.width=video.videoWidth||window.innerWidth;
+      canvas.height=video.videoHeight||window.innerHeight;
+      ctx.drawImage(video,0,0);
+      if(wallMeasured){
+        ctx.strokeStyle="rgba(201,169,110,0.07)";ctx.lineWidth=0.5;
+        const s=ppc*50;
+        for(let x=0;x<canvas.width;x+=s){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,canvas.height);ctx.stroke();}
+        for(let y=0;y<canvas.height;y+=s){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(canvas.width,y);ctx.stroke();}
+      }
+      measurePts.forEach((pt,i)=>{
+        ctx.fillStyle="#C9A96E";ctx.beginPath();ctx.arc(pt.x,pt.y,12,0,Math.PI*2);ctx.fill();
+        ctx.strokeStyle="white";ctx.lineWidth=2;ctx.stroke();
+        ctx.fillStyle="#0E0C0A";ctx.font="bold 12px sans-serif";ctx.textAlign="center";
+        ctx.fillText(i===0?"A":"B",pt.x,pt.y+4.5);ctx.textAlign="left";
+      });
+      if(measurePts.length===2){
+        ctx.strokeStyle="#C9A96E";ctx.lineWidth=2;ctx.setLineDash([8,5]);
+        ctx.beginPath();ctx.moveTo(measurePts[0].x,measurePts[0].y);ctx.lineTo(measurePts[1].x,measurePts[1].y);ctx.stroke();
+        ctx.setLineDash([]);
+        const mx=(measurePts[0].x+measurePts[1].x)/2,my=(measurePts[0].y+measurePts[1].y)/2-18;
+        ctx.fillStyle="rgba(0,0,0,0.8)";ctx.beginPath();ctx.roundRect(mx-38,my-12,76,22,4);ctx.fill();
+        ctx.fillStyle="#C9A96E";ctx.font="bold 12px sans-serif";ctx.textAlign="center";
+        ctx.fillText(getRW()+"cm",mx,my+4);ctx.textAlign="left";
+      }
+      placed.forEach((item,idx)=>{
+        const pw=item.product.w*ppc,ph=item.product.h*ppc,x=item.x-pw/2,y=item.y-ph/2;
+        ctx.fillStyle="rgba(0,0,0,0.18)";ctx.beginPath();ctx.ellipse(item.x,item.y+ph/2+6,pw*0.38,8,0,0,Math.PI*2);ctx.fill();
+        const g=ctx.createLinearGradient(x,y,x,y+ph);
+        g.addColorStop(0,item.product.color);g.addColorStop(1,"rgba(0,0,0,0.35)");
+        ctx.fillStyle=g;ctx.beginPath();ctx.roundRect(x,y,pw,ph,5);ctx.fill();
+        ctx.strokeStyle="rgba(255,255,255,0.1)";ctx.lineWidth=1;ctx.stroke();
+        if(ph>22)for(let i=0;i<3;i++){ctx.fillStyle="rgba(0,0,0,0.18)";ctx.fillRect(x+5+i*(pw/3-2),y+7,pw/3-9,ph-14);}
+        if(selIdx===idx){ctx.strokeStyle="#C9A96E";ctx.lineWidth=2.5;ctx.setLineDash([6,3]);ctx.strokeRect(x-5,y-5,pw+10,ph+10);ctx.setLineDash([]);}
+        ctx.fillStyle="rgba(0,0,0,0.75)";ctx.beginPath();ctx.roundRect(x,y-19,Math.min(pw,160),16,3);ctx.fill();
+        ctx.fillStyle="#C9A96E";ctx.font="bold 9px sans-serif";
+        ctx.fillText(item.product.emoji+" "+item.product.name.slice(0,18),x+4,y-7);
+      });
+      if(wallMeasured){document.getElementById("hud2").textContent=wallW+"×"+wallH+"cm — "+placed.length+" produit(s)";document.getElementById("hud2").style.color="#C9A96E";}
+      if(placed.length>0){
+        const t=placed.reduce((s,p)=>s+p.product.price,0);
+        document.getElementById("sum-txt").textContent=placed.length+" produit(s) · "+t+"€";
+        document.getElementById("summary").style.display="flex";
+      }else{document.getElementById("summary").style.display="none";}
+      document.getElementById("btn-del").style.display=selIdx!==null?"flex":"none";
+    }
+    animId=requestAnimationFrame(draw);
+  };
+  animId=requestAnimationFrame(draw);
+}
+
+// ── TABS ───────────────────────────────────────────────────────────────────
+function switchTab(tab){
+  activeTab=tab;
+  document.querySelectorAll(".tab").forEach((t,i)=>t.classList.toggle("active",["products","measure","ambiances"][i]===tab));
+  renderTab();
+}
+function renderTab(){
+  const c=document.getElementById("panel-content");
+  if(activeTab==="products"){
+    c.innerHTML=PRODUCTS.map(p=>`<div class="prod-card"><span style="font-size:22px">${p.emoji}</span><div class="prod-info"><div class="prod-name">${p.name}</div><div class="prod-price">${p.price}€</div><div class="prod-dims">📐 ${p.w}×${p.h}cm</div></div><button class="btn-place" onclick="placeProduct(${p.id})">+ Placer</button></div>`).join("");
+  }else if(activeTab==="measure"){
+    c.innerHTML=`<div style="font-size:9px;color:#6A5E54;line-height:1.6;margin-bottom:10px;padding:8px;background:#0a0908;border-radius:6px">Entrez une largeur connue, puis touchez 2 points sur le mur pour calibrer.</div>
+    <input class="inp" type="number" id="rw-inp" value="${getRW()}" placeholder="Largeur en cm"/>
+    <div style="font-size:8px;color:#444;margin-bottom:10px">Largeur réelle en cm entre 2 points connus</div>`+
+    (wallMeasured
+      ?`<div style="background:rgba(76,175,138,0.08);border:1px solid #4CAF8A;border-radius:7px;padding:12px;text-align:center"><div style="font-size:9px;color:#4CAF8A;margin-bottom:4px">✓ Mur mesuré avec succès</div><div style="font-size:18px;color:#C9A96E;font-weight:bold">${wallW} × ${wallH} cm</div><button onclick="resetMeasure();renderTab()" style="margin-top:8px;background:transparent;border:1px solid #2A2520;color:#666;padding:4px 12px;border-radius:4px;cursor:pointer;font-family:inherit;font-size:9px">↺ Recommencer</button></div>`
+      :`<button class="btn-meas" onclick="doMeasure()">${measureStep===0?"① Toucher pour démarrer la mesure":measureStep===1?"⬤ Touchez le Point A sur le mur":"⬤ Touchez le Point B à "+getRW()+"cm"}</button>`);
+  }else{
+    c.innerHTML=`<div style="font-size:9px;color:#6A5E54;line-height:1.6;margin-bottom:10px;padding:8px;background:#0a0908;border-radius:6px">Appliquez un style complet en un clic.</div>`+
+    AMBIANCES.map(a=>`<button onclick="applyAmbiance('${a.id}')" style="width:100%;background:#141210;border:1px solid #1E1C18;border-radius:8px;padding:12px;cursor:pointer;font-family:inherit;text-align:left;margin-bottom:8px"><div style="font-size:13px;color:#F0ECE4;margin-bottom:3px">${a.label}</div><div style="font-size:9px;color:#554840">${a.products.length} produits inclus</div></button>`).join("");
+  }
+}
+function getRW(){const i=document.getElementById("rw-inp");return i?parseFloat(i.value)||300:300;}
+
+// ── MEASURE ────────────────────────────────────────────────────────────────
+function doMeasure(){
+  if(measureStep===0){measureStep=1;measurePts=[];showHint("① Touchez un point sur votre mur");}
+  renderTab();
+}
+function resetMeasure(){measureStep=0;measurePts=[];wallMeasured=false;wallW=0;wallH=0;document.getElementById("hud2").textContent="Onglet Mesure →";document.getElementById("hud2").style.color="#666";document.getElementById("step-hint").style.display="none";placed=[];selIdx=null;}
+function showHint(t){const h=document.getElementById("step-hint");h.textContent=t;h.style.display="block";}
+
+// ── PRODUCTS ───────────────────────────────────────────────────────────────
+function placeProduct(id){
+  if(!cameraOn){alert("Activez la caméra d'abord !");return;}
+  const p=PRODUCTS.find(x=>x.id===id);
+  placed.push({product:p,x:canvas.width/2+(Math.random()-0.5)*80,y:canvas.height*0.6+(Math.random()-0.5)*40});
+  selIdx=placed.length-1;
+}
+function applyAmbiance(id){
+  if(!cameraOn){alert("Activez la caméra d'abord !");return;}
+  const a=AMBIANCES.find(x=>x.id===id);
+  placed=a.products.map((pid,i)=>({product:PRODUCTS.find(p=>p.id===pid),x:canvas.width*(0.2+i*0.3),y:canvas.height*0.65}));
+  selIdx=null;
+}
+function deleteSelected(){if(selIdx!==null){placed.splice(selIdx,1);selIdx=null;}}
+function clearAll(){placed=[];selIdx=null;}
+function saveSnap(){const l=document.createElement("a");l.download="muro-ar.png";l.href=canvas.toDataURL("image/png");l.click();}
+
+// ── TOUCH / CLICK ──────────────────────────────────────────────────────────
+function cPos(cx,cy){const r=canvas.getBoundingClientRect();return{x:(cx-r.left)*(canvas.width/r.width),y:(cy-r.top)*(canvas.height/r.height)};}
+function handleTap(cx,cy){
+  const{x,y}=cPos(cx,cy);
+  if(measureStep===1){measurePts=[{x,y}];measureStep=2;showHint("② Touchez le Point B à "+getRW()+"cm du point A");renderTab();return;}
+  if(measureStep===2){
+    measurePts.push({x,y});
+    const d=Math.hypot(measurePts[1].x-measurePts[0].x,measurePts[1].y-measurePts[0].y);
+    ppc=d/getRW();wallW=Math.round(canvas.width/ppc);wallH=Math.round(canvas.height/ppc);
+    wallMeasured=true;measureStep=3;document.getElementById("step-hint").style.display="none";renderTab();return;
+  }
+  let f=false;
+  for(let i=placed.length-1;i>=0;i--){
+    const it=placed[i],pw=it.product.w*ppc,ph=it.product.h*ppc;
+    if(x>=it.x-pw/2-14&&x<=it.x+pw/2+14&&y>=it.y-ph/2-14&&y<=it.y+ph/2+14){selIdx=i;f=true;break;}
+  }
+  if(!f)selIdx=null;
+}
+canvas.addEventListener("touchstart",e=>{
+  e.preventDefault();touchMoved=false;
+  if(measureStep===1||measureStep===2)return;
+  const t=e.touches[0],{x,y}=cPos(t.clientX,t.clientY);
+  for(let i=placed.length-1;i>=0;i--){
+    const it=placed[i],pw=it.product.w*ppc,ph=it.product.h*ppc;
+    if(x>=it.x-pw/2-14&&x<=it.x+pw/2+14&&y>=it.y-ph/2-14&&y<=it.y+ph/2+14){selIdx=i;dragging=i;dragOffX=x-it.x;dragOffY=y-it.y;return;}
+  }
+  selIdx=null;
+},{passive:false});
+canvas.addEventListener("touchmove",e=>{
+  e.preventDefault();touchMoved=true;
+  if(dragging===null)return;
+  const t=e.touches[0],{x,y}=cPos(t.clientX,t.clientY);
+  placed[dragging].x=x-dragOffX;placed[dragging].y=y-dragOffY;
+},{passive:false});
+canvas.addEventListener("touchend",e=>{
+  e.preventDefault();
+  if(!touchMoved){const t=e.changedTouches[0];handleTap(t.clientX,t.clientY);}
+  dragging=null;
+},{passive:false});
+canvas.addEventListener("mousedown",e=>{
+  if(measureStep===1||measureStep===2)return;
+  const{x,y}=cPos(e.clientX,e.clientY);
+  for(let i=placed.length-1;i>=0;i--){
+    const it=placed[i],pw=it.product.w*ppc,ph=it.product.h*ppc;
+    if(x>=it.x-pw/2-10&&x<=it.x+pw/2+10&&y>=it.y-ph/2-10&&y<=it.y+ph/2+10){selIdx=i;dragging=i;dragOffX=x-it.x;dragOffY=y-it.y;return;}
+  }
+  selIdx=null;
+});
+canvas.addEventListener("mousemove",e=>{if(dragging===null)return;const{x,y}=cPos(e.clientX,e.clientY);placed[dragging].x=x-dragOffX;placed[dragging].y=y-dragOffY;});
+canvas.addEventListener("mouseup",()=>{dragging=null;});
+canvas.addEventListener("click",e=>{if(measureStep===1||measureStep===2)handleTap(e.clientX,e.clientY);});
+
+// ── INIT ───────────────────────────────────────────────────────────────────
+renderTab();
+// Show warning immediately if file://
+if(location.protocol==="file:"){
+  setErr(
+    "⚠️ <strong>Fichier local détecté</strong><br><br>"+
+    "Android bloque la caméra sur les fichiers locaux même avec permission.<br><br>"+
+    "✅ <strong>Solution gratuite (2 min) :</strong><br>"+
+    "Sur votre PC → <strong>tiiny.host</strong> → glissez ce fichier → copiez le lien HTTPS → ouvrez sur Firefox mobile ✓",
+    "warn"
+  );
+}
+</script>
+</body>
+</html>
